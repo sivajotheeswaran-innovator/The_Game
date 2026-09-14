@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Clash Arena — Real-Time 1v1 Arena Duel</title>
+  <meta name="description" content="A real-time 1v1 top-down arena duel game. Best of 7 rounds, 3 clean hits per round. Feat. windup telegraphs, tight parry windows, and i-frame dodges.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="appContainer">
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Top Toolbar -->
+    <header id="topBar">
+      <div class="brand-badge">
+        <h1 class="brand-title">Clash Arena</h1>
+        <span class="spec-badge">STAGE B (ONLINE PVP)</span>
+      </div>
+
+      <!-- Online Match Status (Visible when connected to a room) -->
+      <div id="onlineMatchStatus" class="online-status-hud" style="display: none;">
+        <div class="status-chip room-chip">ROOM: <span id="hudRoomCode">----</span></div>
+        <div class="status-chip role-chip" id="hudRoleChip">YOU: P1</div>
+        <div class="status-chip ping-chip"><span class="ping-dot" id="pingDot"></span> <span id="hudPing">-- ms</span></div>
+        <button id="leaveOnlineBtn" class="hud-btn leave-btn" title="Leave online match and return to solo mode">LEAVE</button>
+      </div>
+
+      <div class="toolbar-actions" id="soloToolbarActions">
+        <button id="openOnlineModalBtn" class="hud-btn online-btn" title="Play online PvP with a friend via Room Code">
+          ⚡ ONLINE PVP
+        </button>
+        <button id="toggleP2ModeBtn" class="hud-btn" title="Cycle opponent: Adaptive AI -> Medium -> Easy -> Static Dummy -> 2-Player Local Duel">
+          OPPONENT: ADAPTIVE AI
+        </button>
+        <button id="resetMatchBtn" class="hud-btn" title="Restart full best-of-7 match instantly">
+          RESTART MATCH
+        </button>
+      </div>
+    </header>
+
+    <!-- Controls Guide -->
+    <footer id="controlsGuide">
+      <div class="guide-section">
+        <span class="p1-color">P1:</span>&nbsp;
+        <span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> Move &nbsp;|&nbsp;
+        <span class="key-badge">SPACE</span> / <span class="key-badge">F</span> Strike &nbsp;|&nbsp;
+        <span class="key-badge">SHIFT</span> / <span class="key-badge">Q</span> Dodge &nbsp;|&nbsp;
+        <span class="key-badge">E</span> Parry
+      </div>
+      <div class="guide-section" id="p2GuideSection">
+        <span class="p2-color">P2:</span>&nbsp;
+        <span class="key-badge">ARROWS</span> Move &nbsp;|&nbsp;
+        <span class="key-badge">O</span> Strike &nbsp;|&nbsp;
+        <span class="key-badge">P</span> Dodge &nbsp;|&nbsp;
+        <span class="key-badge">U</span> Parry
+      </div>
+    </footer>
+
+    <!-- Mobile Virtual Touch Controls -->
+    <div id="touchControlsContainer">
+      <div id="touchStickZone">
+        <div id="touchStickThumb"></div>
+      </div>
+      <div id="touchActionButtons">
+        <button id="btnTouchDodge" class="touch-btn dodge">DODGE</button>
+        <button id="btnTouchParry" class="touch-btn parry">PARRY</button>
+        <button id="btnTouchAttack" class="touch-btn atk">STRIKE</button>
+      </div>
+    </div>
+
+    <!-- Match End Victory Modal -->
+    <div id="matchEndOverlay">
+      <div class="modal-card">
+        <div id="overlayWinnerText" class="modal-winner">PLAYER 1 WINS!</div>
+        <div class="modal-subtitle" id="overlaySubtitle">First to 4 round victories achieved.</div>
+        <button id="overlayPlayAgainBtn" class="play-again-btn">PLAY AGAIN</button>
+      </div>
+    </div>
+
+    <!-- Online PvP Matchmaking Modal -->
+    <div id="onlineModal" class="full-modal-overlay">
+      <div class="modal-card online-card">
+        <button id="closeOnlineModalBtn" class="modal-close-btn">&times;</button>
+        <h2 class="modal-title">ONLINE 1v1 DUEL</h2>
+        <p class="modal-desc">Authoritative 60Hz Netcode with Client-Side Prediction</p>
+
+        <div class="online-choice-container" id="onlineChoiceView">
+          <button id="btnCreateRoom" class="action-card-btn">
+            <span class="btn-icon">⚡</span>
+            <span class="btn-text">CREATE MATCH</span>
+            <span class="btn-hint">Generate a 4-letter room code for a friend</span>
+          </button>
+
+          <div class="or-divider"><span>OR</span></div>
+
+          <div class="join-room-box">
+            <input type="text" id="joinRoomInput" placeholder="ENTER 4-LETTER CODE" maxlength="4" autocomplete="off" spellcheck="false">
+            <button id="btnJoinRoom" class="action-card-btn join-btn">JOIN MATCH</button>
+          </div>
+        </div>
+
+        <!-- Waiting View (When Host creates room) -->
+        <div id="onlineWaitingView" class="online-subview" style="display: none;">
+          <div class="waiting-header">SHARE THIS ROOM CODE WITH YOUR OPPONENT:</div>
+          <div class="room-code-display" id="displayRoomCode">----</div>
+          <div class="waiting-spinner"></div>
+          <p class="waiting-text">Waiting for opponent to connect...</p>
+          <button id="btnCancelRoom" class="cancel-room-btn">CANCEL</button>
+        </div>
+
+        <!-- Status / Error Messages -->
+        <div id="onlineModalStatus" class="online-status-msg"></div>
+      </div>
+    </div>
+
+    <!-- Online Disconnect & Pause Overlays (Phase 6.5) -->
+    <div id="onlinePauseOverlay" class="full-modal-overlay">
+      <div class="modal-card pause-card">
+        <div class="pause-icon">⚠️</div>
+        <div class="modal-winner warning-text">MATCH PAUSED</div>
+        <div class="modal-subtitle" id="pauseReasonText">Opponent connection lost. Grace period active (5s)...</div>
+      </div>
+    </div>
+
+    <div id="opponentDisconnectedOverlay" class="full-modal-overlay">
+      <div class="modal-card victory-card">
+        <div class="modal-winner" id="oppDiscTitle">OPPONENT DISCONNECTED</div>
+        <div class="modal-subtitle" id="oppDiscSubtitle">Opponent failed to reconnect. Victory awarded!</div>
+        <button id="oppDiscReturnBtn" class="play-again-btn">RETURN TO MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Scripts (strict architectural layering) -->
+  <script src="lib/pixi.min.js"></script>
+  <script src="state.js"></script>
+  <script src="simulation.js"></script>
+  <script src="ai.js"></script>
+  <script src="input.js"></script>
+  <script src="network.js"></script>
+  <script src="renderer.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
