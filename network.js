@@ -137,7 +137,7 @@
       } catch (e) {}
 
       // 3. Render Live Deployment URL
-      const LIVE_RENDER_URL = 'wss://clash-arena-server.onrender.com';
+      const LIVE_RENDER_URL = 'wss://the-game-1-tj7k.onrender.com';
 
       const loc = typeof window !== 'undefined' ? window.location : null;
       if (loc && (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1')) {
