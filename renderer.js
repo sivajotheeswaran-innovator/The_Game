@@ -41,24 +41,46 @@
 
       // FPS calculation
       this.lastFrameTime = performance.now();
-      this.fps = 60;
       this.frameCount = 0;
       this.fpsTimer = 0;
+      this.fps = 60;
+      // Mobile detection for high-performance rendering
+      this.isMobile = (typeof window !== 'undefined') && (
+        ('ontouchstart' in window) ||
+        (navigator.maxTouchPoints > 0) ||
+        (window.innerWidth <= 900)
+      );
+      this.enableGlow = !this.isMobile;
 
       this.resize();
       window.addEventListener('resize', () => this.resize());
     }
 
+    setGlow(color, blur) {
+      if (this.enableGlow) {
+        this.ctx.shadowColor = color;
+        this.ctx.shadowBlur = blur;
+      } else {
+        this.ctx.shadowBlur = 0;
+      }
+    }
+
+    clearGlow() {
+      this.ctx.shadowBlur = 0;
+    }
+
     resize() {
-      const dpr = window.devicePixelRatio || 1;
+      // Clamp DPR to max 1.5 on mobile, 2.0 on desktop (prevents 3x/4x mobile GPU burn)
+      const maxDpr = this.isMobile ? 1.5 : 2.0;
+      const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
       const rect = this.canvas.parentElement 
         ? this.canvas.parentElement.getBoundingClientRect() 
         : { width: window.innerWidth, height: window.innerHeight };
 
       this.width = rect.width || window.innerWidth;
       this.height = rect.height || window.innerHeight;
-      this.canvas.width = this.width * dpr;
-      this.canvas.height = this.height * dpr;
+      this.canvas.width = Math.round(this.width * dpr);
+      this.canvas.height = Math.round(this.height * dpr);
       this.canvas.style.width = this.width + 'px';
       this.canvas.style.height = this.height + 'px';
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -187,6 +209,11 @@
         this.fps = Math.round((this.frameCount / this.fpsTimer));
         this.frameCount = 0;
         this.fpsTimer = 0;
+        const fpsEl = document.getElementById('hudFps');
+        if (fpsEl) {
+          fpsEl.textContent = `${this.fps} FPS`;
+          fpsEl.style.color = this.fps >= 50 ? '#00ff88' : (this.fps >= 30 ? '#ffaa00' : '#ff2a6d');
+        }
       }
 
       // Safety limits on particles and texts
@@ -305,8 +332,7 @@
 
       // Boundary Walls with Neon Cyber Glow
       ctx.save();
-      ctx.shadowColor = '#00f0ff';
-      ctx.shadowBlur = 12;
+      this.setGlow('#00f0ff', 12);
       ctx.strokeStyle = '#00f0ff';
       ctx.lineWidth = 3;
       ctx.strokeRect(wall, wall, w - wall * 2, h - wall * 2);
@@ -381,8 +407,7 @@
 
         // Flash strike arc
         ctx.strokeStyle = '#ffffff';
-        ctx.shadowColor = player.color;
-        ctx.shadowBlur = 18;
+        this.setGlow(player.color, 18);
         ctx.lineWidth = 6;
         ctx.beginPath();
         ctx.arc(0, 0, reach + 10, -Math.PI * 0.35, Math.PI * 0.35);
@@ -401,8 +426,7 @@
       // PARRY ACTIVE (Energy Shield)
       if (player.actionState === 'PARRY_ACTIVE') {
         ctx.save();
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 20;
+        this.setGlow('#00f0ff', 20);
         ctx.strokeStyle = '#00f0ff';
         ctx.fillStyle = 'rgba(0, 240, 255, 0.28)';
         ctx.lineWidth = 4;
@@ -451,8 +475,7 @@
 
         ctx.font = '900 12px sans-serif';
         ctx.fillStyle = '#ffe600';
-        ctx.shadowColor = '#ffe600';
-        ctx.shadowBlur = 8;
+        this.setGlow('#ffe600', 8);
         ctx.textAlign = 'center';
         ctx.fillText('STUNNED', 0, -player.radius - 22);
         ctx.restore();
@@ -461,8 +484,7 @@
       // --- 2. Character Core Body ---
       ctx.save();
       // Outer glow
-      ctx.shadowColor = player.color;
-      ctx.shadowBlur = 12;
+      this.setGlow(player.color, 12);
       ctx.fillStyle = player.color;
       ctx.beginPath();
       ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
@@ -516,8 +538,7 @@
         ctx.save();
         ctx.globalAlpha = Math.max(0, p.alpha);
         ctx.fillStyle = p.color;
-        ctx.shadowColor = p.color;
-        ctx.shadowBlur = 8;
+        this.setGlow(p.color, 8);
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx.fill();
@@ -541,8 +562,7 @@
         ctx.font = '900 ' + t.fontSize + 'px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = t.color;
-        ctx.shadowColor = t.color;
-        ctx.shadowBlur = 10;
+        this.setGlow(t.color, 10);
         ctx.fillText(t.text, t.x, t.y);
         ctx.restore();
       }
@@ -563,13 +583,12 @@
       ctx.textAlign = 'center';
       ctx.font = '900 28px monospace';
       ctx.fillStyle = timeRemaining <= 10 ? '#ff2a6d' : '#ffffff';
-      ctx.shadowColor = timeRemaining <= 10 ? '#ff2a6d' : '#00f0ff';
-      ctx.shadowBlur = 10;
+      this.setGlow(timeRemaining <= 10 ? '#ff2a6d' : '#00f0ff', 10);
       ctx.fillText(timeStr, midX, topMargin + 20);
 
       ctx.font = '700 12px sans-serif';
       ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.shadowBlur = 0;
+      this.clearGlow();
       ctx.fillText('ROUND ' + state.round.number + ' / 7', midX, topMargin + 38);
 
       // 2. Best-of-7 Match Score Pips (First to 4 wins)
@@ -581,12 +600,12 @@
         ctx.arc(dotX, topMargin + 18, 6, 0, Math.PI * 2);
         if (i < p1Wins) {
           ctx.fillStyle = '#00f0ff';
-          ctx.shadowColor = '#00f0ff';
-          ctx.shadowBlur = 8;
+          this.setGlow('#00f0ff', 8);
           ctx.fill();
         } else {
           ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
           ctx.lineWidth = 2;
+          this.clearGlow();
           ctx.stroke();
         }
       }
@@ -599,12 +618,12 @@
         ctx.arc(dotX, topMargin + 18, 6, 0, Math.PI * 2);
         if (i < p2Wins) {
           ctx.fillStyle = '#ff2a6d';
-          ctx.shadowColor = '#ff2a6d';
-          ctx.shadowBlur = 8;
+          this.setGlow('#ff2a6d', 8);
           ctx.fill();
         } else {
           ctx.strokeStyle = 'rgba(255, 42, 109, 0.3)';
           ctx.lineWidth = 2;
+          this.clearGlow();
           ctx.stroke();
         }
       }
@@ -633,8 +652,7 @@
       ctx.textAlign = alignRight ? 'right' : 'left';
       ctx.font = '900 16px sans-serif';
       ctx.fillStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 8;
+      this.setGlow(color, 8);
       ctx.fillText(name, x, y);
 
       // 3 nodes representing hits remaining
@@ -654,6 +672,7 @@
         } else {
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
           ctx.lineWidth = 2;
+          this.clearGlow();
           ctx.stroke();
         }
       }
@@ -680,13 +699,12 @@
 
           ctx.font = '900 48px sans-serif';
           ctx.fillStyle = winnerColor;
-          ctx.shadowColor = winnerColor;
-          ctx.shadowBlur = 24;
+          this.setGlow(winnerColor, 24);
           ctx.fillText(winner + ' WINS THE MATCH!', midX, midY);
 
           ctx.font = '700 20px sans-serif';
           ctx.fillStyle = '#ffffff';
-          ctx.shadowBlur = 0;
+          this.clearGlow();
           ctx.fillText('BEST OF 7 VICTORY (' + state.match.winsP1 + ' - ' + state.match.winsP2 + ')', midX, midY + 40);
         } else {
           // Round Over
@@ -707,14 +725,13 @@
 
           ctx.font = '900 36px sans-serif';
           ctx.fillStyle = color;
-          ctx.shadowColor = color;
-          ctx.shadowBlur = 18;
+          this.setGlow(color, 18);
           ctx.fillText(title, midX, midY);
 
           const reasonText = state.round.reason === 'TIMEOUT' ? 'TIMEOUT DECISION' : '3 CLEAN HITS LANDED';
           ctx.font = '600 16px sans-serif';
           ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-          ctx.shadowBlur = 0;
+          this.clearGlow();
           ctx.fillText(reasonText + ' — NEXT ROUND STARTING...', midX, midY + 36);
         }
 

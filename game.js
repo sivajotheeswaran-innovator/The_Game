@@ -206,6 +206,7 @@
       // Opponent Modes: 'AI_ADAPTIVE' | 'AI_MEDIUM' | 'AI_EASY' | 'DUMMY' | 'LOCAL_2P' | 'ONLINE'
       this.opponentMode = 'AI_ADAPTIVE';
       this.isPaused = false;
+      this.isTabHidden = false;
 
       // State is completely separated
       this.state = ClashState.createInitialState();
@@ -222,6 +223,7 @@
       this._setupUI();
       this._setupOnlineNetworking();
       this._setupTouch();
+      this._setupVisibility();
     }
 
     _setupUI() {
@@ -665,9 +667,26 @@
       thumb.style.transform = `translate(calc(-50% + ${cx}px), calc(-50% + ${cy}px))`;
     }
 
+    _setupVisibility() {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          this.isTabHidden = true;
+        } else {
+          this.isTabHidden = false;
+          this.lastTime = performance.now();
+          this.accumulator = 0;
+        }
+      });
+    }
+
     start() {
       const loop = (currentTime) => {
         requestAnimationFrame(loop);
+
+        if (this.isTabHidden) {
+          this.lastTime = currentTime;
+          return;
+        }
 
         let wallDt = (currentTime - this.lastTime) / 1000;
         this.lastTime = currentTime;
