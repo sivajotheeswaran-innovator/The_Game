@@ -163,19 +163,23 @@ class Room {
           this.currentInputs[pid].parry = false;
         }
 
-        // 4. Broadcast state snapshot to both clients
-        this.broadcast({
-          type: MSG.STATE,
-          tick: this.tickCount,
-          lastProcessedSeq: {
-            1: this.lastProcessedSeq[1],
-            2: this.lastProcessedSeq[2]
-          },
-          state: this.state
-        });
+        // 4. Broadcast state snapshot to both clients at 30Hz (every 2 ticks)
+        // or immediately if critical combat events occurred (HIT, PARRY)
+        const hasEvents = this.state.events && this.state.events.length > 0;
+        if (this.tickCount % 2 === 0 || hasEvents) {
+          this.broadcast({
+            type: MSG.STATE,
+            tick: this.tickCount,
+            lastProcessedSeq: {
+              1: this.lastProcessedSeq[1],
+              2: this.lastProcessedSeq[2]
+            },
+            state: this.state
+          });
 
-        // 5. Clean up events on server after broadcast
-        this.state.events = [];
+          // Clean up events on server after broadcast
+          this.state.events = [];
+        }
 
         // 6. If match finished, stop loop after delay
         if (this.state.match.isOver) {

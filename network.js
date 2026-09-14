@@ -56,6 +56,10 @@
       this.pingMs = 0;
       this.pingInterval = null;
 
+      // Pending authoritative server snapshot for frame-synced reconciliation
+      this.hasPendingState = false;
+      this.pendingServerState = null;
+
       // Callbacks
       this.callbacks = {
         onRoomCreated: null,
@@ -63,6 +67,7 @@
         onRoomError: null,
         onMatchStart: null,
         onStateUpdate: null,
+        onEvents: null,
         onMatchPaused: null,
         onMatchResumed: null,
         onOpponentDisconnected: null,
@@ -196,8 +201,8 @@
         dt: dt
       });
 
-      // Keep buffer bounded (max 120 unacknowledged inputs, ~2 sec)
-      if (this.inputBuffer.length > 120) {
+      // Keep buffer bounded (max 30 unacknowledged inputs, ~500ms)
+      if (this.inputBuffer.length > 30) {
         this.inputBuffer.shift();
       }
 
@@ -324,13 +329,22 @@
           isInvulnerable: oppServerState.isInvulnerable
         });
 
-        // Keep last 10 snapshots (~160ms history)
-        if (this.opponentSnapshots.length > 10) {
+        // Keep last 3 snapshots (enough for smooth interpolation without memory creep)
+        if (this.opponentSnapshots.length > 3) {
           this.opponentSnapshots.shift();
         }
       }
 
-      // 3. Callback into game loop for reconciliation
+      // 3. Mark pending authoritative state for game loop reconciliation
+      this.hasPendingState = true;
+      this.pendingServerState = serverState;
+
+      // 4. Immediately trigger audio/visual events (HIT, PARRY_SUCCESS)
+      if (serverState.events && serverState.events.length && this.callbacks.onEvents) {
+        this.callbacks.onEvents(serverState.events);
+      }
+
+      // 5. Callback into game loop for reconciliation
       if (this.callbacks.onStateUpdate) {
         this.callbacks.onStateUpdate(serverState, this.inputBuffer);
       }
@@ -360,19 +374,31 @@
       const totalSpan = s1.time - s0.time;
       const t = totalSpan > 0 ? Math.max(0, Math.min(1, (renderTime - s0.time) / totalSpan)) : 1;
 
-      return {
-        pos: {
-          x: s0.pos.x + (s1.pos.x - s0.pos.x) * t,
-          y: s0.pos.y + (s1.pos.y - s0.pos.y) * t
-        },
-        facing: t > 0.5 ? s1.facing : s0.facing,
-        vel: s1.vel,
-        actionState: s1.actionState,
-        actionTimer: s1.actionTimer,
-        actionProgress: s1.actionProgress,
-        hitsTaken: s1.hitsTaken,
-        isInvulnerable: s1.isInvulnerable
-      };
+      if (!this._reusableOpponent) {
+        this._reusableOpponent = {
+          pos: { x: 0, y: 0 },
+          facing: { x: 0, y: 0 },
+          vel: { x: 0, y: 0 },
+          actionState: 'IDLE',
+          actionTimer: 0,
+          actionProgress: 0,
+          hitsTaken: 0,
+          isInvulnerable: false
+        };
+      }
+
+      const res = this._reusableOpponent;
+      res.pos.x = s0.pos.x + (s1.pos.x - s0.pos.x) * t;
+      res.pos.y = s0.pos.y + (s1.pos.y - s0.pos.y) * t;
+      res.facing = t > 0.5 ? s1.facing : s0.facing;
+      res.vel = s1.vel;
+      res.actionState = s1.actionState;
+      res.actionTimer = s1.actionTimer;
+      res.actionProgress = s1.actionProgress;
+      res.hitsTaken = s1.hitsTaken;
+      res.isInvulnerable = s1.isInvulnerable;
+
+      return res;
     }
 
     _handleClose() {

@@ -215,6 +215,10 @@
       this.accumulator = 0;
       this.lastTime = performance.now();
 
+      // Reusable simulation input buffers to prevent GC thrashing on mobile
+      this._simInputs = { 1: null, 2: null };
+      this._idleInput = { moveX: 0, moveY: 0, attack: false, dodge: false, parry: false };
+
       this._setupUI();
       this._setupOnlineNetworking();
       this._setupTouch();
@@ -464,28 +468,32 @@
         if (p2Guide) p2Guide.style.display = 'none';
       };
 
-      // Server State Reconciliation
+      // Server Events & State Reconciliation
+      this.network.callbacks.onEvents = (events) => {
+        if (this.opponentMode !== 'ONLINE') return;
+        this.sound.processEvents(events);
+        this.renderer.processEvents(events);
+      };
+
       this.network.callbacks.onStateUpdate = (serverState, unackedInputs) => {
         if (this.opponentMode !== 'ONLINE') return;
 
-        // Process audio/visual events emitted by server tick
+        // Process any events on the server state
         if (serverState.events && serverState.events.length) {
           this.sound.processEvents(serverState.events);
           this.renderer.processEvents(serverState.events);
         }
 
-        // Snap client to authoritative server state
-        this.state = JSON.parse(JSON.stringify(serverState));
+        // Snap client to authoritative server state directly (NO redundant JSON stringify/parse!)
+        this.state = serverState;
 
         // Replay unacknowledged local inputs on top of authoritative state
         const myId = this.network.playerId;
         for (let i = 0; i < unackedInputs.length; i++) {
           const replayPacket = unackedInputs[i];
-          const simInputs = {
-            1: myId === 1 ? replayPacket.input : { moveX: 0, moveY: 0, attack: false, dodge: false, parry: false },
-            2: myId === 2 ? replayPacket.input : { moveX: 0, moveY: 0, attack: false, dodge: false, parry: false }
-          };
-          ClashSimulation.update(this.state, simInputs, replayPacket.dt);
+          this._simInputs[1] = myId === 1 ? replayPacket.input : this._idleInput;
+          this._simInputs[2] = myId === 2 ? replayPacket.input : this._idleInput;
+          ClashSimulation.update(this.state, this._simInputs, replayPacket.dt);
         }
       };
 
@@ -696,12 +704,10 @@
             this.network.sendInput(myInput, this.fixedDt);
 
             const myId = this.network.playerId;
-            const predInputs = {
-              1: myId === 1 ? myInput : { moveX: 0, moveY: 0, attack: false, dodge: false, parry: false },
-              2: myId === 2 ? myInput : { moveX: 0, moveY: 0, attack: false, dodge: false, parry: false }
-            };
+            this._simInputs[1] = myId === 1 ? myInput : this._idleInput;
+            this._simInputs[2] = myId === 2 ? myInput : this._idleInput;
 
-            ClashSimulation.update(this.state, predInputs, this.fixedDt);
+            ClashSimulation.update(this.state, this._simInputs, this.fixedDt);
             // In online mode, sound/events are also triggered from authoritative updates
           } else {
             // OFFLINE MODES: AI, Dummy, or Local 2-Player
