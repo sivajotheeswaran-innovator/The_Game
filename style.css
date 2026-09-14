@@ -423,6 +423,86 @@ html, body {
   box-shadow: 0 0 8px #ff2a6d;
 }
 
+/* Event-driven In-Match Poor-Connection Toast (Phase 3) */
+.network-toast {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-10px);
+  z-index: 45;
+  background: rgba(16, 20, 36, 0.96);
+  border: 1px solid #ff2a6d;
+  box-shadow: 0 4px 24px rgba(255, 42, 109, 0.45);
+  border-radius: 8px;
+  padding: 8px 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ff9bbb;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.network-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+/* Pre-Match Ping & Warning (Phase 2) */
+.pre-match-ping-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 14px;
+  margin-bottom: 12px;
+}
+
+.pre-match-warning {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ff5277;
+  background: rgba(255, 42, 109, 0.14);
+  border: 1px solid rgba(255, 42, 109, 0.4);
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.4;
+}
+
+/* Post-Match Context Note (Phase 4) */
+.overlay-network-note {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffaa00;
+  background: rgba(255, 170, 0, 0.1);
+  border: 1px solid rgba(255, 170, 0, 0.3);
+  border-radius: 6px;
+  padding: 7px 14px;
+  margin-top: 12px;
+  margin-bottom: 6px;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.4;
+}
+
 .leave-btn {
   background: rgba(255, 42, 109, 0.2);
   border-color: var(--crimson);

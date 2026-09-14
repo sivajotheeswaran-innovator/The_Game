@@ -9,6 +9,9 @@
 </head>
 <body>
   <div id="appContainer">
+    <!-- In-Match Poor Connection Event Toast (Phase 3) -->
+    <div id="networkToast" class="network-toast">⚠️ Connection Unstable (180ms)</div>
+
     <!-- Game Canvas -->
     <canvas id="gameCanvas"></canvas>
 
@@ -76,6 +79,7 @@
       <div class="modal-card">
         <div id="overlayWinnerText" class="modal-winner">PLAYER 1 WINS!</div>
         <div class="modal-subtitle" id="overlaySubtitle">First to 4 round victories achieved.</div>
+        <div class="overlay-network-note" id="overlayNetworkNote" style="display: none;"></div>
         <button id="overlayPlayAgainBtn" class="play-again-btn">PLAY AGAIN</button>
       </div>
     </div>
@@ -112,6 +116,12 @@
         <div id="onlineWaitingView" class="online-subview" style="display: none;">
           <div class="waiting-header">SHARE THIS ROOM CODE WITH YOUR OPPONENT:</div>
           <div class="room-code-display" id="displayRoomCode">----</div>
+          <div class="pre-match-ping-box" id="waitingPingContainer">
+            <span class="ping-dot" id="waitingPingDot"></span> SERVER PING: <span id="waitingPingVal">-- ms</span>
+          </div>
+          <div class="pre-match-warning" id="waitingPingWarning" style="display: none;">
+            ⚠️ Connection quality: Poor — matches may feel less responsive
+          </div>
           <div class="waiting-spinner"></div>
           <p class="waiting-text">Waiting for opponent to connect...</p>
           <button id="btnCancelRoom" class="cancel-room-btn">CANCEL</button>

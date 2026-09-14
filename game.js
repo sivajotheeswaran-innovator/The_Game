@@ -220,6 +220,11 @@
       this._simInputs = { 1: null, 2: null };
       this._idleInput = { moveX: 0, moveY: 0, attack: false, dodge: false, parry: false };
 
+      // Connection quality tracking (connection-quality-indicator-spec.md)
+      this.currentPingTier = 'GOOD';
+      this.networkToastTimer = null;
+      this.onlineMatchStats = { totalSamples: 0, poorSamples: 0 };
+
       this._setupUI();
       this._setupOnlineNetworking();
       this._setupTouch();
@@ -272,6 +277,8 @@
         this.state = ClashState.createInitialState();
         this.ai.resetRound();
         if (overlayEl) overlayEl.classList.remove('visible');
+        const overlayNetNote = document.getElementById('overlayNetworkNote');
+        if (overlayNetNote) overlayNetNote.style.display = 'none';
       };
 
       if (resetBtn) {
@@ -346,6 +353,27 @@
       if (modal) modal.classList.remove('visible');
       if (this.network && !this.network.isOnlineMatch) {
         this.network.disconnect();
+      }
+    }
+
+    _showNetworkToast(msg) {
+      const toast = document.getElementById('networkToast');
+      if (!toast) return;
+      toast.textContent = msg;
+      toast.classList.add('visible');
+      if (this.networkToastTimer) clearTimeout(this.networkToastTimer);
+      this.networkToastTimer = setTimeout(() => {
+        toast.classList.remove('visible');
+        this.networkToastTimer = null;
+      }, 2800);
+    }
+
+    _hideNetworkToast() {
+      const toast = document.getElementById('networkToast');
+      if (toast) toast.classList.remove('visible');
+      if (this.networkToastTimer) {
+        clearTimeout(this.networkToastTimer);
+        this.networkToastTimer = null;
       }
     }
 
@@ -449,6 +477,11 @@
         this._closeOnlineModal();
         this.opponentMode = 'ONLINE';
         this.isPaused = false;
+        this.onlineMatchStats = { totalSamples: 0, poorSamples: 0 };
+        this.currentPingTier = 'GOOD';
+        this._hideNetworkToast();
+        const overlayNetNote = document.getElementById('overlayNetworkNote');
+        if (overlayNetNote) overlayNetNote.style.display = 'none';
 
         // Ingest server initial state
         this.state = JSON.parse(JSON.stringify(msg.state));
@@ -536,12 +569,53 @@
       };
 
       this.network.callbacks.onPingUpdate = (pingMs) => {
+        // Cap displayed number at 999 (Free Fire-style)
+        const displayPing = pingMs >= 999 ? '999+ ms' : `${pingMs} ms`;
+
+        // Color tiers: Green (<80ms), Yellow (80-150ms), Red (>150ms)
+        const tier = pingMs < 80 ? 'GOOD' : (pingMs <= 150 ? 'FAIR' : 'POOR');
+        const tierColor = tier === 'GOOD' ? '#00ff88' : (tier === 'FAIR' ? '#ffaa00' : '#ff2a6d');
+
+        // Update Top HUD
         const hudPing = document.getElementById('hudPing');
         const pingDot = document.getElementById('pingDot');
-        if (hudPing) hudPing.textContent = `${pingMs} ms`;
+        if (hudPing) {
+          hudPing.textContent = displayPing;
+          hudPing.style.color = tierColor;
+        }
         if (pingDot) {
-          pingDot.classList.toggle('amber', pingMs > 70 && pingMs <= 150);
-          pingDot.classList.toggle('red', pingMs > 150);
+          pingDot.classList.toggle('amber', tier === 'FAIR');
+          pingDot.classList.toggle('red', tier === 'POOR');
+        }
+
+        // Phase 2: Pre-Match Connection Check (in room waiting screen)
+        const waitingPingVal = document.getElementById('waitingPingVal');
+        const waitingPingDot = document.getElementById('waitingPingDot');
+        const waitingPingWarning = document.getElementById('waitingPingWarning');
+        if (waitingPingVal) {
+          waitingPingVal.textContent = displayPing;
+          waitingPingVal.style.color = tierColor;
+        }
+        if (waitingPingDot) {
+          waitingPingDot.classList.toggle('amber', tier === 'FAIR');
+          waitingPingDot.classList.toggle('red', tier === 'POOR');
+        }
+        if (waitingPingWarning) {
+          waitingPingWarning.style.display = tier === 'POOR' ? 'block' : 'none';
+        }
+
+        // Phase 3 & 4: In-Match monitoring
+        if (this.opponentMode === 'ONLINE' && this.state.mode !== 'MATCH_OVER' && !this.isPaused) {
+          this.onlineMatchStats.totalSamples++;
+          if (tier === 'POOR') {
+            this.onlineMatchStats.poorSamples++;
+          }
+
+          // Trigger brief toast only when connection quality degrades into POOR tier
+          if (tier === 'POOR' && this.currentPingTier !== 'POOR') {
+            this._showNetworkToast(`⚠️ Connection Unstable (${displayPing})`);
+          }
+          this.currentPingTier = tier;
         }
       };
 
@@ -561,6 +635,13 @@
       this.network.disconnect();
       this.opponentMode = 'AI_ADAPTIVE';
       this.isPaused = false;
+      this._hideNetworkToast();
+      this.onlineMatchStats = { totalSamples: 0, poorSamples: 0 };
+      const overlayNetNote = document.getElementById('overlayNetworkNote');
+      if (overlayNetNote) overlayNetNote.style.display = 'none';
+      const waitingPingWarning = document.getElementById('waitingPingWarning');
+      if (waitingPingWarning) waitingPingWarning.style.display = 'none';
+
       this.state = ClashState.createInitialState();
       this.ai.resetRound();
 
@@ -780,10 +861,28 @@
               overlayText.textContent = isWinner ? 'VICTORY!' : 'DEFEAT!';
               overlayText.style.color = isWinner ? 'var(--cyan)' : 'var(--crimson)';
               if (overlaySub) overlaySub.textContent = isWinner ? 'You won the match!' : 'Opponent claimed match victory.';
+
+              // Phase 4: Post-match network context note
+              const overlayNetNote = document.getElementById('overlayNetworkNote');
+              if (overlayNetNote) {
+                if (this.onlineMatchStats.totalSamples >= 3) {
+                  const poorPct = Math.round((this.onlineMatchStats.poorSamples / this.onlineMatchStats.totalSamples) * 100);
+                  if (poorPct >= 20) {
+                    overlayNetNote.textContent = `⚠️ Note: Match experienced high latency for ${poorPct}% of playtime.`;
+                    overlayNetNote.style.display = 'block';
+                  } else {
+                    overlayNetNote.style.display = 'none';
+                  }
+                } else {
+                  overlayNetNote.style.display = 'none';
+                }
+              }
             } else {
               overlayText.textContent = p1Won ? 'PLAYER 1 WINS!' : 'PLAYER 2 WINS!';
               overlayText.style.color = p1Won ? '#00f0ff' : '#ff2a6d';
               if (overlaySub) overlaySub.textContent = 'First to 4 round victories achieved.';
+              const overlayNetNote = document.getElementById('overlayNetworkNote');
+              if (overlayNetNote) overlayNetNote.style.display = 'none';
             }
           } else {
             overlayEl.classList.remove('visible');
