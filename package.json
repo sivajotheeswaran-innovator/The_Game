@@ -4,13 +4,16 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server/index.js",
+    "postinstall": "cd server && npm install",
+    "test": "node test_simulation.js && node test_network.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "pixi.js": "^8.20.1"
+    "pixi.js": "^8.20.1",
+    "ws": "^8.18.0"
   }
 }

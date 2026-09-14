@@ -118,14 +118,33 @@
     }
 
     _getDefaultServerUrl() {
-      // If served via http://localhost or file://, default to ws://localhost:8080
-      const loc = window.location;
-      if (!loc || loc.protocol === 'file:' || loc.hostname === 'localhost' || loc.hostname === '127.0.0.1') {
+      // 1. Query parameter override: ?server=wss://...
+      try {
+        if (typeof window !== 'undefined' && window.location && window.location.search) {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('server')) {
+            return params.get('server');
+          }
+        }
+      } catch (e) {}
+
+      // 2. Local storage override
+      try {
+        if (typeof localStorage !== 'undefined') {
+          const saved = localStorage.getItem('clash_arena_server_url');
+          if (saved) return saved;
+        }
+      } catch (e) {}
+
+      // 3. Render Live Deployment URL
+      const LIVE_RENDER_URL = 'wss://clash-arena-server.onrender.com';
+
+      const loc = typeof window !== 'undefined' ? window.location : null;
+      if (loc && (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1')) {
         return 'ws://localhost:8080';
       }
-      // If deployed on HTTPS (e.g. Render / Vercel), use wss://
-      const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${loc.host}`;
+
+      return LIVE_RENDER_URL;
     }
 
     _startPingHeartbeat() {

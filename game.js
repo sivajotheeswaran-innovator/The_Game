@@ -353,11 +353,33 @@
       const displayRoomCode = document.getElementById('displayRoomCode');
       const statusMsg = document.getElementById('onlineModalStatus');
 
+      const serverUrlInput = document.getElementById('serverUrlInput');
+      if (serverUrlInput) {
+        try {
+          const savedUrl = localStorage.getItem('clash_arena_server_url');
+          if (savedUrl) {
+            serverUrlInput.value = savedUrl;
+          } else {
+            serverUrlInput.value = this.network._getDefaultServerUrl();
+          }
+        } catch (e) {}
+      }
+
+      const getTargetServerUrl = () => {
+        const customUrl = serverUrlInput?.value.trim();
+        if (customUrl) {
+          try { localStorage.setItem('clash_arena_server_url', customUrl); } catch (e) {}
+          return customUrl;
+        }
+        return undefined;
+      };
+
       // Create Room Button
       if (btnCreate) {
         btnCreate.addEventListener('click', () => {
           if (statusMsg) statusMsg.textContent = 'Connecting to server...';
-          this.network.connect().then(() => {
+          const targetUrl = getTargetServerUrl();
+          this.network.connect(targetUrl).then(() => {
             if (statusMsg) statusMsg.textContent = '';
             this.network.createRoom();
           }).catch(err => {
@@ -376,7 +398,8 @@
           }
 
           if (statusMsg) statusMsg.textContent = 'Connecting to server...';
-          this.network.connect().then(() => {
+          const targetUrl = getTargetServerUrl();
+          this.network.connect(targetUrl).then(() => {
             if (statusMsg) statusMsg.textContent = 'Joining room ' + code + '...';
             this.network.joinRoom(code);
           }).catch(err => {
