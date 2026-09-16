@@ -265,6 +265,75 @@ console.log('=== CLASH ARENA: WEAPON EXPANSION TEST SUITE ===\n');
   console.log('✔ Test 6 Passed: Bomb explodes and penetrates parry as an AoE hazard.\n');
 }
 
+// Test 7: Auto-Aim for Long-Range Weapons (Bow & Bomb) while Strafing / Moving
+{
+  console.log('[Test 7] Testing Auto-Aim for Bow and Bomb while strafing/moving...');
+  const state = createInitialState(1000, 600);
+  const p1 = state.players[0];
+  const p2 = state.players[1];
+
+  // Part A: Bow Auto-Aim while moving vertically away from opponent
+  p1.weapon = 'BOW';
+  p1.pos.x = 300;
+  p1.pos.y = 300;
+  p1.facing = { x: 0, y: -1 }; // Facing UP
+
+  p2.weapon = 'SPEAR';
+  p2.pos.x = 550;
+  p2.pos.y = 300; // Directly to the RIGHT of P1
+
+  // P1 moves UP (moveX: 0, moveY: -1) while pressing attack
+  update(state, { 1: { moveX: 0, moveY: -1, attack: true }, 2: {} }, DT);
+
+  // Assert auto-aim immediately snapped facing toward opponent (RIGHT: +X)
+  assert.strictEqual(p1.actionState, ActionState.WINDUP);
+  assert(p1.facing.x > 0.95, `Bow auto-aim should snap facing towards opponent (got x=${p1.facing.x})`);
+  assert(Math.abs(p1.facing.y) < 0.1, `Bow auto-aim should zero out vertical strafe direction (got y=${p1.facing.y})`);
+
+  // Simulate WINDUP ticks while P1 continues holding UP key
+  for (let i = 0; i < 23; i++) {
+    update(state, { 1: { moveX: 0, moveY: -1 }, 2: {} }, DT);
+  }
+
+  // Confirm projectile fires horizontally toward P2
+  assert(state.projectiles && state.projectiles.length === 1, 'Arrow should spawn');
+  assert(state.projectiles[0].vx > 400, 'Arrow flies with positive vx toward target');
+
+  // Let arrow reach target and confirm hit
+  let hitDetected = false;
+  for (let t = 0; t < 30; t++) {
+    update(state, {}, DT);
+    if (state.events.some(e => e.type === 'HIT' && e.weapon === 'BOW')) {
+      hitDetected = true;
+      break;
+    }
+  }
+  assert.strictEqual(hitDetected, true, 'Auto-aimed arrow successfully hits opponent');
+
+  // Part B: Bomb Auto-Aim Distance Clamping
+  p1.weapon = 'BOMB';
+  p1.actionState = ActionState.IDLE;
+  p1.pos.x = 300;
+  p1.pos.y = 300;
+
+  // Position P2 110px away (closer than 175px max throw)
+  p2.pos.x = 410;
+  p2.pos.y = 300;
+  p2.actionState = ActionState.IDLE;
+
+  // P1 throws bomb while strafing
+  update(state, { 1: { moveX: -1, moveY: 0, attack: true }, 2: {} }, DT);
+  assert(p1.facing.x > 0.95, 'Bomb auto-aim snaps facing toward target');
+
+  // Finish windup (19 ticks)
+  simulateTicks(state, {}, 19);
+  assert.strictEqual(state.hazards.length, 1, 'Bomb spawns');
+  // Bomb target should clamp to 410 (opponent pos), not overshoot to 300 + 175 = 475
+  assert(Math.abs(state.hazards[0].x - 410) < 5, `Bomb should land right on opponent at x=410, got ${state.hazards[0].x}`);
+
+  console.log('✔ Test 7 Passed: Auto-aim reliably tracks and leads targets while moving.\n');
+}
+
 console.log('==============================================');
 console.log('ALL WEAPON EXPANSION TESTS PASSED 100%!');
 console.log('==============================================');

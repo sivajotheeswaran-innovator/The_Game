@@ -674,13 +674,18 @@
           ctx.lineTo(pullBack + 26 * progress, 0);
           ctx.stroke();
 
-          // Aiming beam line
+          // Aiming beam line - auto-aim aligns beam through target
+          let beamDist = 240;
+          if (opponent && opponent.pos) {
+            const distToOpp = Math.hypot(opponent.pos.x - player.pos.x, opponent.pos.y - player.pos.y);
+            beamDist = Math.max(200, distToOpp + 30);
+          }
           ctx.strokeStyle = 'rgba(0, 255, 136, ' + (0.2 + progress * 0.5) + ')';
           ctx.lineWidth = 1.5;
           ctx.setLineDash([4, 4]);
           ctx.beginPath();
           ctx.moveTo(pullBack + 26 * progress, 0);
-          ctx.lineTo(240, 0);
+          ctx.lineTo(beamDist, 0);
           ctx.stroke();
           ctx.setLineDash([]);
         } else if (weapon === 'SHOTGUN') {
@@ -697,8 +702,12 @@
           ctx.fill();
           ctx.stroke();
         } else if (weapon === 'BOMB') {
-          // Bomb throw trajectory
-          const throwDist = 175;
+          // Bomb throw trajectory clamped to opponent position (Auto-aim)
+          let throwDist = 175;
+          if (opponent && opponent.pos) {
+            const distToOpp = Math.hypot(opponent.pos.x - player.pos.x, opponent.pos.y - player.pos.y);
+            throwDist = Math.min(distToOpp, 175);
+          }
           ctx.strokeStyle = 'rgba(255, 100, 0, ' + (0.3 + progress * 0.5) + ')';
           ctx.lineWidth = 2;
           ctx.setLineDash([6, 4]);

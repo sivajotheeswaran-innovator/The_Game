@@ -158,15 +158,16 @@
    * Process state machine for a single player
    */
   function processPlayerInputAndAction(player, opponent, input, dt, state) {
-    // Face opponent naturally if idle and not moving, or align facing to movement
+    // Face opponent naturally if idle and not moving, or align facing to movement in IDLE
     const moveLen = vecLen(input.moveX, input.moveY);
-    if (moveLen > 0.1) {
-      player.facing = vecNorm(input.moveX, input.moveY);
-    } else if (player.actionState === ActionState.IDLE) {
-      // Orient facing toward opponent
-      const toOpp = vecNorm(opponent.pos.x - player.pos.x, opponent.pos.y - player.pos.y);
-      if (toOpp.x !== 0 || toOpp.y !== 0) {
-        player.facing = toOpp;
+    if (player.actionState === ActionState.IDLE) {
+      if (moveLen > 0.1) {
+        player.facing = vecNorm(input.moveX, input.moveY);
+      } else {
+        const toOpp = vecNorm(opponent.pos.x - player.pos.x, opponent.pos.y - player.pos.y);
+        if (toOpp.x !== 0 || toOpp.y !== 0) {
+          player.facing = toOpp;
+        }
       }
     }
 
@@ -225,6 +226,14 @@
           player.vel.x = 0;
           player.vel.y = 0;
 
+          // Auto-aim for long-range weapons (Bow / Bomb): lock aim directly onto opponent
+          if (weaponSpec.type === 'PROJECTILE' || weaponSpec.type === 'HAZARD_AOE') {
+            const toOpp = vecNorm(opponent.pos.x - player.pos.x, opponent.pos.y - player.pos.y);
+            if (toOpp.x !== 0 || toOpp.y !== 0) {
+              player.facing = toOpp;
+            }
+          }
+
           state.events.push({
             type: 'ATTACK_WINDUP',
             playerId: player.id,
@@ -261,6 +270,12 @@
           // Bow / Bomb: stationary while aiming/drawing/priming
           player.vel.x = 0;
           player.vel.y = 0;
+
+          // Continuous auto-aim tracking during draw: keep aiming directly at target
+          const toOpp = vecNorm(opponent.pos.x - player.pos.x, opponent.pos.y - player.pos.y);
+          if (toOpp.x !== 0 || toOpp.y !== 0) {
+            player.facing = toOpp;
+          }
         }
 
         if (player.actionTimer <= 0) {
@@ -274,9 +289,18 @@
             player.vel.x = player.facing.x * (CONSTANTS.MOVE_SPEED * 0.7);
             player.vel.y = player.facing.y * (CONSTANTS.MOVE_SPEED * 0.7);
           } else if (weaponSpec.type === 'PROJECTILE') {
+            // Lock auto-aim at exact release moment
+            const toOpp = vecNorm(opponent.pos.x - player.pos.x, opponent.pos.y - player.pos.y);
+            if (toOpp.x !== 0 || toOpp.y !== 0) {
+              player.facing = toOpp;
+            }
             spawnProjectile(state, player, weaponSpec);
           } else if (weaponSpec.type === 'HAZARD_AOE') {
-            spawnHazard(state, player, weaponSpec);
+            const toOpp = vecNorm(opponent.pos.x - player.pos.x, opponent.pos.y - player.pos.y);
+            if (toOpp.x !== 0 || toOpp.y !== 0) {
+              player.facing = toOpp;
+            }
+            spawnHazard(state, player, weaponSpec, opponent);
           }
 
           state.events.push({
@@ -470,12 +494,18 @@
   /**
    * Spawns a ground-targeted hazard entity (e.g. Bomb)
    */
-  function spawnHazard(state, player, weaponSpec) {
+  function spawnHazard(state, player, weaponSpec, opponent) {
     if (!state.hazards) state.hazards = [];
     if (!state.nextEntityId) state.nextEntityId = 1;
 
-    const targetX = player.pos.x + player.facing.x * weaponSpec.throwDistance;
-    const targetY = player.pos.y + player.facing.y * weaponSpec.throwDistance;
+    let throwDist = weaponSpec.throwDistance;
+    if (opponent && opponent.pos) {
+      const distToOpp = Math.hypot(opponent.pos.x - player.pos.x, opponent.pos.y - player.pos.y);
+      throwDist = Math.min(distToOpp, weaponSpec.throwDistance);
+    }
+
+    const targetX = player.pos.x + player.facing.x * throwDist;
+    const targetY = player.pos.y + player.facing.y * throwDist;
     const clampedX = Math.max(state.arena.minX + 20, Math.min(state.arena.maxX - 20, targetX));
     const clampedY = Math.max(state.arena.minY + 20, Math.min(state.arena.maxY - 20, targetY));
 
