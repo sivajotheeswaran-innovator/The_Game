@@ -119,7 +119,9 @@
 
       this.resize();
       this._applyUIBlur();
-      window.addEventListener('resize', () => this.resize());
+      if (typeof window !== 'undefined') {
+        window.addEventListener('resize', () => this.resize());
+      }
     }
 
     setPreset(key) {
@@ -133,7 +135,7 @@
       this._applyUIBlur();
       this.resize();
 
-      const hudPreset = document.getElementById('hudGraphicsPreset');
+      const hudPreset = (typeof document !== 'undefined') ? document.getElementById('hudGraphicsPreset') : null;
       if (hudPreset) {
         hudPreset.textContent = this.preset.label.toUpperCase();
       }
@@ -169,10 +171,11 @@
 
     resize() {
       const dprCap = this.preset ? this.preset.dprCap : 1.5;
-      const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+      const deviceDpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+      const dpr = Math.min(deviceDpr, dprCap);
       const rect = this.canvas.parentElement 
         ? this.canvas.parentElement.getBoundingClientRect() 
-        : { width: window.innerWidth, height: window.innerHeight };
+        : { width: (typeof window !== 'undefined' ? window.innerWidth : 1000), height: (typeof window !== 'undefined' ? window.innerHeight : 600) };
 
       this.width = rect.width || window.innerWidth;
       this.height = rect.height || window.innerHeight;
