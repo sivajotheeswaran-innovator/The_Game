@@ -84,7 +84,7 @@ wss.on('connection', (ws, req) => {
         rooms.set(roomCode, room);
         console.log(`[SERVER] Room ${roomCode} created. Total rooms: ${rooms.size}`);
 
-        const result = room.addPlayer(ws, req);
+        const result = room.addPlayer(ws, req, msg);
         if (result.success) {
           ws.roomCode = roomCode;
           ws.playerId = result.playerId;
@@ -116,7 +116,7 @@ wss.on('connection', (ws, req) => {
           return;
         }
 
-        const result = room.addPlayer(ws, req);
+        const result = room.addPlayer(ws, req, msg);
         if (result.success) {
           ws.roomCode = targetCode;
           ws.playerId = result.playerId;

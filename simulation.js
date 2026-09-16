@@ -45,6 +45,15 @@
   }
 
   /**
+   * Helper: Retrieve weapon parameters for a player
+   */
+  function getWeaponSpec(player) {
+    const key = (player && player.weapon ? player.weapon : 'SPEAR').toUpperCase();
+    return (CONSTANTS.WEAPONS && CONSTANTS.WEAPONS[key]) ? CONSTANTS.WEAPONS[key] : CONSTANTS.WEAPONS.SPEAR;
+  }
+
+
+  /**
    * Clamps player position to arena bounding walls
    */
   function clampToArena(player, arena) {
@@ -85,6 +94,9 @@
     // Clear ephemeral events from previous tick
     state.events = [];
     state.totalElapsedTime += dt;
+    state.projectiles = state.projectiles || [];
+    state.hazards = state.hazards || [];
+    state.nextEntityId = state.nextEntityId || 1;
 
     // Handle Match Over mode
     if (state.mode === 'MATCH_OVER') {
@@ -125,14 +137,18 @@
     applyMovement(p1, state.arena, dt);
     applyMovement(p2, state.arena, dt);
 
-    // 4. Player-to-player physical soft collision push
+    // 4. Update projectile entities and hazard fields
+    updateProjectiles(state, dt);
+    updateHazards(state, dt);
+
+    // 5. Player-to-player physical soft collision push
     resolveBodyOverlap(p1, p2);
 
-    // 5. Hit detection & Combat resolution (Telegraph -> Active hit frame -> Parry vs Attack check)
+    // 6. Hit detection & Combat resolution (Telegraph -> Active hit frame -> Parry vs Attack check)
     resolveCombat(p1, p2, state);
     resolveCombat(p2, p1, state);
 
-    // 6. Check round end conditions (First to 3 hits or 45s timeout)
+    // 7. Check round end conditions (First to 3 hits or 45s timeout)
     checkRoundStatus(state);
 
     return state;
@@ -200,17 +216,19 @@
 
         // Check for Attack request
         if (input.attack) {
+          const weaponSpec = getWeaponSpec(player);
           player.actionState = ActionState.WINDUP;
-          player.actionTimer = CONSTANTS.ATTACK_WINDUP_TIME;
+          player.actionTimer = weaponSpec.windupTime;
+          player.actionProgress = 0;
           player.hitRegisteredThisSwing = false;
           player.wasParried = false;
-          // Slight slowdown during windup
           player.vel.x = 0;
           player.vel.y = 0;
 
           state.events.push({
             type: 'ATTACK_WINDUP',
             playerId: player.id,
+            weapon: weaponSpec.id,
             x: player.pos.x,
             y: player.pos.y,
             facing: player.facing,
@@ -231,23 +249,40 @@
       }
 
       case ActionState.WINDUP: {
+        const weaponSpec = getWeaponSpec(player);
         player.actionTimer -= dt;
-        player.actionProgress = 1.0 - Math.max(0, player.actionTimer / CONSTANTS.ATTACK_WINDUP_TIME);
-        // Slight drift in facing direction during windup
-        player.vel.x = player.facing.x * (CONSTANTS.MOVE_SPEED * 0.15);
-        player.vel.y = player.facing.y * (CONSTANTS.MOVE_SPEED * 0.15);
+        player.actionProgress = 1.0 - Math.max(0, player.actionTimer / weaponSpec.windupTime);
+
+        if (weaponSpec.type === 'MELEE' || weaponSpec.type === 'BURST_MELEE') {
+          // Slight drift in facing direction during windup
+          player.vel.x = player.facing.x * (CONSTANTS.MOVE_SPEED * 0.15);
+          player.vel.y = player.facing.y * (CONSTANTS.MOVE_SPEED * 0.15);
+        } else {
+          // Bow / Bomb: stationary while aiming/drawing/priming
+          player.vel.x = 0;
+          player.vel.y = 0;
+        }
 
         if (player.actionTimer <= 0) {
           // Transition to ACTIVE attack hit frame
           player.actionState = ActionState.ACTIVE;
-          player.actionTimer = CONSTANTS.ATTACK_ACTIVE_TIME;
-          // Small lunge forward
-          player.vel.x = player.facing.x * (CONSTANTS.MOVE_SPEED * 0.7);
-          player.vel.y = player.facing.y * (CONSTANTS.MOVE_SPEED * 0.7);
+          player.actionTimer = weaponSpec.activeTime;
+          player.actionProgress = 0;
+
+          if (weaponSpec.type === 'MELEE' || weaponSpec.type === 'BURST_MELEE') {
+            // Small lunge forward
+            player.vel.x = player.facing.x * (CONSTANTS.MOVE_SPEED * 0.7);
+            player.vel.y = player.facing.y * (CONSTANTS.MOVE_SPEED * 0.7);
+          } else if (weaponSpec.type === 'PROJECTILE') {
+            spawnProjectile(state, player, weaponSpec);
+          } else if (weaponSpec.type === 'HAZARD_AOE') {
+            spawnHazard(state, player, weaponSpec);
+          }
 
           state.events.push({
             type: 'ATTACK_ACTIVE',
             playerId: player.id,
+            weapon: weaponSpec.id,
             x: player.pos.x,
             y: player.pos.y,
             facing: player.facing,
@@ -257,17 +292,24 @@
       }
 
       case ActionState.ACTIVE: {
+        const weaponSpec = getWeaponSpec(player);
         player.actionTimer -= dt;
-        player.actionProgress = 1.0 - Math.max(0, player.actionTimer / CONSTANTS.ATTACK_ACTIVE_TIME);
+        player.actionProgress = 1.0 - Math.max(0, player.actionTimer / weaponSpec.activeTime);
 
-        // Decelerate lunge
-        player.vel.x *= 0.90;
-        player.vel.y *= 0.90;
+        if (weaponSpec.type === 'MELEE' || weaponSpec.type === 'BURST_MELEE') {
+          // Decelerate lunge
+          player.vel.x *= 0.90;
+          player.vel.y *= 0.90;
+        } else {
+          player.vel.x = 0;
+          player.vel.y = 0;
+        }
 
         if (player.actionTimer <= 0) {
           // Attack window finished -> enter RECOVERY
           player.actionState = ActionState.RECOVERY;
-          player.actionTimer = CONSTANTS.ATTACK_RECOVERY_TIME;
+          player.actionTimer = weaponSpec.recoveryTime;
+          player.actionProgress = 0;
           player.vel.x = 0;
           player.vel.y = 0;
         }
@@ -275,8 +317,9 @@
       }
 
       case ActionState.RECOVERY: {
+        const weaponSpec = getWeaponSpec(player);
         player.actionTimer -= dt;
-        player.actionProgress = 1.0 - Math.max(0, player.actionTimer / CONSTANTS.ATTACK_RECOVERY_TIME);
+        player.actionProgress = 1.0 - Math.max(0, player.actionTimer / weaponSpec.recoveryTime);
         player.vel.x = 0;
         player.vel.y = 0;
 
@@ -388,7 +431,286 @@
   }
 
   /**
-   * Combat resolution: Evaluates attacker against target
+   * Spawns a directional projectile entity (e.g. Bow arrow)
+   */
+  function spawnProjectile(state, player, weaponSpec) {
+    if (!state.projectiles) state.projectiles = [];
+    if (!state.nextEntityId) state.nextEntityId = 1;
+
+    const spawnDist = player.radius + 6;
+    const proj = {
+      id: state.nextEntityId++,
+      ownerId: player.id,
+      weapon: weaponSpec.id,
+      type: 'ARROW',
+      x: player.pos.x + player.facing.x * spawnDist,
+      y: player.pos.y + player.facing.y * spawnDist,
+      startX: player.pos.x,
+      startY: player.pos.y,
+      vx: player.facing.x * weaponSpec.projectileSpeed,
+      vy: player.facing.y * weaponSpec.projectileSpeed,
+      radius: weaponSpec.projectileRadius || 7,
+      minEffectiveRange: weaponSpec.minEffectiveRange || 40,
+      active: true,
+    };
+
+    state.projectiles.push(proj);
+    state.events.push({
+      type: 'PROJECTILE_FIRED',
+      projectileId: proj.id,
+      ownerId: player.id,
+      weapon: weaponSpec.id,
+      x: proj.x,
+      y: proj.y,
+      vx: proj.vx,
+      vy: proj.vy,
+    });
+  }
+
+  /**
+   * Spawns a ground-targeted hazard entity (e.g. Bomb)
+   */
+  function spawnHazard(state, player, weaponSpec) {
+    if (!state.hazards) state.hazards = [];
+    if (!state.nextEntityId) state.nextEntityId = 1;
+
+    const targetX = player.pos.x + player.facing.x * weaponSpec.throwDistance;
+    const targetY = player.pos.y + player.facing.y * weaponSpec.throwDistance;
+    const clampedX = Math.max(state.arena.minX + 20, Math.min(state.arena.maxX - 20, targetX));
+    const clampedY = Math.max(state.arena.minY + 20, Math.min(state.arena.maxY - 20, targetY));
+
+    const hazard = {
+      id: state.nextEntityId++,
+      ownerId: player.id,
+      weapon: weaponSpec.id,
+      type: 'BOMB',
+      x: clampedX,
+      y: clampedY,
+      fuseTimer: weaponSpec.fuseTime,
+      totalFuseTime: weaponSpec.fuseTime,
+      radius: weaponSpec.explosionRadius,
+      active: true,
+    };
+
+    state.hazards.push(hazard);
+    state.events.push({
+      type: 'HAZARD_SPAWNED',
+      hazardId: hazard.id,
+      ownerId: player.id,
+      x: hazard.x,
+      y: hazard.y,
+      radius: hazard.radius,
+      fuseTime: hazard.fuseTimer,
+    });
+  }
+
+  /**
+   * Updates projectile flight, arena wall impacts, and target collision
+   */
+  function updateProjectiles(state, dt) {
+    if (!state.projectiles || state.projectiles.length === 0) return;
+
+    for (let i = 0; i < state.projectiles.length; i++) {
+      const proj = state.projectiles[i];
+      if (!proj.active) continue;
+
+      proj.x += proj.vx * dt;
+      proj.y += proj.vy * dt;
+
+      // Arena boundary collision
+      if (proj.x < state.arena.minX || proj.x > state.arena.maxX ||
+          proj.y < state.arena.minY || proj.y > state.arena.maxY) {
+        proj.active = false;
+        state.events.push({
+          type: 'PROJECTILE_WALL',
+          projectileId: proj.id,
+          x: proj.x,
+          y: proj.y,
+        });
+        continue;
+      }
+
+      // Check collision against other players
+      for (let p = 0; p < state.players.length; p++) {
+        const target = state.players[p];
+        if (target.id === proj.ownerId) continue;
+
+        if (circlesOverlap(proj.x, proj.y, proj.radius, target.pos.x, target.pos.y, target.radius)) {
+          // Point-blank weakness check (< minEffectiveRange from launch origin)
+          const distFromOrigin = Math.hypot(target.pos.x - proj.startX, target.pos.y - proj.startY);
+          if (distFromOrigin < proj.minEffectiveRange) {
+            proj.active = false;
+            state.events.push({
+              type: 'PROJECTILE_GLANCE',
+              projectileId: proj.id,
+              ownerId: proj.ownerId,
+              targetId: target.id,
+              x: proj.x,
+              y: proj.y,
+            });
+            break;
+          }
+
+          // Dodge i-frames check
+          if (target.isInvulnerable) {
+            proj.active = false;
+            state.events.push({
+              type: 'ATTACK_DODGED',
+              attackerId: proj.ownerId,
+              targetId: target.id,
+              weapon: 'BOW',
+              x: proj.x,
+              y: proj.y,
+            });
+            break;
+          }
+
+          // Parry active window check
+          if (target.actionState === ActionState.PARRY_ACTIVE) {
+            proj.active = false;
+            // Parrier recovers immediately
+            target.actionState = ActionState.IDLE;
+            target.actionTimer = 0;
+            target.actionProgress = 0;
+
+            // Check if archer is within close shockwave distance (< 160px)
+            const attacker = state.players.find(pl => pl.id === proj.ownerId);
+            let attackerStunned = false;
+            if (attacker) {
+              const archerDist = Math.hypot(target.pos.x - attacker.pos.x, target.pos.y - attacker.pos.y);
+              if (archerDist < 160) {
+                attacker.actionState = ActionState.STUNNED;
+                attacker.actionTimer = CONSTANTS.PARRY_STUN_DURATION;
+                attacker.vel.x = -attacker.facing.x * 120;
+                attacker.vel.y = -attacker.facing.y * 120;
+                attacker.wasParried = true;
+                attackerStunned = true;
+              }
+            }
+
+            state.events.push({
+              type: 'PARRY_SUCCESS',
+              parrierId: target.id,
+              attackerId: proj.ownerId,
+              attackerStunned: attackerStunned,
+              isProjectile: true,
+              x: proj.x,
+              y: proj.y,
+            });
+            break;
+          }
+
+          // Clean projectile hit lands!
+          proj.active = false;
+          target.hitsTaken += 1;
+          const attacker = state.players.find(pl => pl.id === proj.ownerId);
+          if (attacker) attacker.hitsLanded += 1;
+
+          // Target recoil
+          const normVel = vecNorm(proj.vx, proj.vy);
+          target.vel.x = normVel.x * 200;
+          target.vel.y = normVel.y * 200;
+
+          if (target.actionState !== ActionState.DASH) {
+            target.actionState = ActionState.RECOVERY;
+            target.actionTimer = 0.20;
+          }
+
+          state.events.push({
+            type: 'HIT',
+            attackerId: proj.ownerId,
+            targetId: target.id,
+            weapon: 'BOW',
+            hitsRemaining: Math.max(0, CONSTANTS.HITS_TO_WIN_ROUND - target.hitsTaken),
+            targetHitsTaken: target.hitsTaken,
+            x: proj.x,
+            y: proj.y,
+          });
+          break;
+        }
+      }
+    }
+
+    state.projectiles = state.projectiles.filter(p => p.active);
+  }
+
+  /**
+   * Updates hazard countdowns and detonation AoE damage
+   */
+  function updateHazards(state, dt) {
+    if (!state.hazards || state.hazards.length === 0) return;
+
+    for (let i = 0; i < state.hazards.length; i++) {
+      const hazard = state.hazards[i];
+      if (!hazard.active) continue;
+
+      hazard.fuseTimer -= dt;
+      if (hazard.fuseTimer <= 0) {
+        hazard.active = false;
+
+        state.events.push({
+          type: 'HAZARD_EXPLODED',
+          hazardId: hazard.id,
+          ownerId: hazard.ownerId,
+          x: hazard.x,
+          y: hazard.y,
+          radius: hazard.radius,
+        });
+
+        // Detonation AoE check vs players
+        for (let p = 0; p < state.players.length; p++) {
+          const player = state.players[p];
+          if (circlesOverlap(hazard.x, hazard.y, hazard.radius, player.pos.x, player.pos.y, player.radius)) {
+            // Dodging with invulnerability frames avoids hazard damage
+            if (player.isInvulnerable) {
+              state.events.push({
+                type: 'ATTACK_DODGED',
+                attackerId: hazard.ownerId,
+                targetId: player.id,
+                weapon: 'BOMB',
+                x: player.pos.x,
+                y: player.pos.y,
+              });
+              continue;
+            }
+
+            // Unparryable! Even if player is in PARRY_ACTIVE, bomb explodes through it.
+            player.hitsTaken += 1;
+            const owner = state.players.find(pl => pl.id === hazard.ownerId);
+            if (owner && owner.id !== player.id) {
+              owner.hitsLanded += 1;
+            }
+
+            // Knockback away from explosion center
+            const kb = vecNorm(player.pos.x - hazard.x, player.pos.y - hazard.y);
+            player.vel.x = (kb.x !== 0 || kb.y !== 0 ? kb.x : 1) * 280;
+            player.vel.y = (kb.x !== 0 || kb.y !== 0 ? kb.y : 0) * 280;
+
+            if (player.actionState !== ActionState.DASH) {
+              player.actionState = ActionState.RECOVERY;
+              player.actionTimer = 0.25;
+            }
+
+            state.events.push({
+              type: 'HIT',
+              attackerId: hazard.ownerId,
+              targetId: player.id,
+              weapon: 'BOMB',
+              hitsRemaining: Math.max(0, CONSTANTS.HITS_TO_WIN_ROUND - player.hitsTaken),
+              targetHitsTaken: player.hitsTaken,
+              x: player.pos.x,
+              y: player.pos.y,
+            });
+          }
+        }
+      }
+    }
+
+    state.hazards = state.hazards.filter(h => h.active);
+  }
+
+  /**
+   * Combat resolution: Evaluates melee and burst-melee attackers against targets
    */
   function resolveCombat(attacker, target, state) {
     // Only resolve during the ACTIVE hit frame and once per attack swing
@@ -396,13 +718,22 @@
       return;
     }
 
+    const weaponSpec = getWeaponSpec(attacker);
+    // Projectiles and Hazard AoEs resolve through updateProjectiles/updateHazards
+    if (weaponSpec.type !== 'MELEE' && weaponSpec.type !== 'BURST_MELEE') {
+      return;
+    }
+
+    const reach = weaponSpec.reach || CONSTANTS.ATTACK_REACH;
+    const radius = weaponSpec.hitboxRadius || CONSTANTS.ATTACK_HITBOX_RADIUS;
+
     // Calculate attack hitbox position in front of attacker
-    const hitboxX = attacker.pos.x + attacker.facing.x * CONSTANTS.ATTACK_REACH;
-    const hitboxY = attacker.pos.y + attacker.facing.y * CONSTANTS.ATTACK_REACH;
+    const hitboxX = attacker.pos.x + attacker.facing.x * reach;
+    const hitboxY = attacker.pos.y + attacker.facing.y * reach;
 
     // Check overlap with target
     const isContact = circlesOverlap(
-      hitboxX, hitboxY, CONSTANTS.ATTACK_HITBOX_RADIUS,
+      hitboxX, hitboxY, radius,
       target.pos.x, target.pos.y, target.radius
     );
 
@@ -419,6 +750,7 @@
         type: 'ATTACK_DODGED',
         attackerId: attacker.id,
         targetId: target.id,
+        weapon: weaponSpec.id,
         x: hitboxX,
         y: hitboxY,
       });
@@ -444,6 +776,7 @@
         type: 'PARRY_SUCCESS',
         parrierId: target.id,
         attackerId: attacker.id,
+        weapon: weaponSpec.id,
         x: (hitboxX + target.pos.x) * 0.5,
         y: (hitboxY + target.pos.y) * 0.5,
       });
@@ -469,6 +802,7 @@
       type: 'HIT',
       attackerId: attacker.id,
       targetId: target.id,
+      weapon: weaponSpec.id,
       hitsRemaining: Math.max(0, CONSTANTS.HITS_TO_WIN_ROUND - target.hitsTaken),
       targetHitsTaken: target.hitsTaken,
       x: (hitboxX + target.pos.x) * 0.5,

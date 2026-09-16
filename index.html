@@ -22,6 +22,14 @@
         <span class="spec-badge">STAGE B (ONLINE PVP)</span>
       </div>
       <div class="status-chip fps-chip" id="fpsDisplay"><span id="hudFps">60 FPS</span></div>
+      <button id="openGraphicsModalBtn" class="status-chip graphics-chip" title="Tune Graphics Quality (Smooth / Max / Ultra / Ultra Max)">
+        <span class="graphics-icon">⚙️</span>
+        <span id="hudGraphicsPreset">MAX</span>
+      </button>
+      <button id="openCharSelectBtn" class="status-chip heroes-chip" title="Choose Hero & Weapon Archetype (Kaelen, Lyra, Torren, Ignis)">
+        <span class="heroes-icon">⚔️</span>
+        <span id="hudCurrentHero">KAELEN</span>
+      </button>
 
       <!-- Online Match Status (Visible when connected to a room) -->
       <div id="onlineMatchStatus" class="online-status-hud" style="display: none;">
@@ -146,6 +154,152 @@
         <div class="modal-winner" id="oppDiscTitle">OPPONENT DISCONNECTED</div>
         <div class="modal-subtitle" id="oppDiscSubtitle">Opponent failed to reconnect. Victory awarded!</div>
         <button id="oppDiscReturnBtn" class="play-again-btn">RETURN TO MENU</button>
+      </div>
+    </div>
+
+    <!-- Graphics Quality Settings Modal (Phase 2) -->
+    <div id="graphicsModal" class="full-modal-overlay">
+      <div class="modal-card graphics-card">
+        <button id="closeGraphicsModalBtn" class="modal-close-btn">&times;</button>
+        <h2 class="modal-title">GRAPHICS QUALITY</h2>
+        <p class="modal-desc">Select visual tier (Renderer only — does not affect match fairness)</p>
+
+        <div class="preset-options-grid">
+          <button class="preset-btn" data-preset="SMOOTH">
+            <div class="preset-header">
+              <span class="preset-name">SMOOTH</span>
+              <span class="preset-badge">1.0x DPR</span>
+            </div>
+            <div class="preset-desc">Max FPS & minimal heat. Flat colors, 0 glow, 0 blur.</div>
+          </button>
+
+          <button class="preset-btn" data-preset="MAX">
+            <div class="preset-header">
+              <span class="preset-name">MAX</span>
+              <span class="preset-badge">1.5x DPR</span>
+            </div>
+            <div class="preset-desc">Balanced 60FPS for mobile. Key combat telegraph glow.</div>
+          </button>
+
+          <button class="preset-btn" data-preset="ULTRA">
+            <div class="preset-header">
+              <span class="preset-name">ULTRA</span>
+              <span class="preset-badge">2.0x DPR</span>
+            </div>
+            <div class="preset-desc">Crisp high-res visuals. Character & hit node glow, light blur.</div>
+          </button>
+
+          <button class="preset-btn" data-preset="ULTRA_MAX">
+            <div class="preset-header">
+              <span class="preset-name">ULTRA MAX</span>
+              <span class="preset-badge">Native DPR</span>
+            </div>
+            <div class="preset-desc">Full showcase fidelity. All 18 glow passes, full UI blur.</div>
+          </button>
+        </div>
+
+        <div class="graphics-modal-footer">
+          <div class="modal-fps-badge">CURRENT: <span id="graphicsModalFps">60 FPS</span></div>
+          <span class="graphics-note">Instant live switch — no reload needed</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Character & Weapon Archetype Selection Modal -->
+    <div id="characterSelectModal" class="full-modal-overlay">
+      <div class="modal-card heroes-card">
+        <button id="closeCharSelectModalBtn" class="modal-close-btn">&times;</button>
+        <h2 class="modal-title">CHOOSE YOUR HERO</h2>
+        <p class="modal-desc">Select your combat archetype and weapon mastery for battle</p>
+
+        <div class="hero-roster-grid">
+          <!-- Kaelen: Spear -->
+          <div class="hero-card active" data-hero="KAELEN">
+            <div class="hero-header">
+              <div class="hero-avatar avatar-kaelen">⚡</div>
+              <div class="hero-identity">
+                <h3 class="hero-name">KAELEN</h3>
+                <span class="hero-title">The Duelist</span>
+              </div>
+              <span class="weapon-badge melee-badge">SPEAR</span>
+            </div>
+            <p class="hero-summary">Disciplined melee spearman. Balanced reach thrust with reliable parry punish windows.</p>
+            <div class="hero-stats">
+              <div class="stat-row"><span class="stat-label">STYLE</span><span class="stat-value">Melee (Thrust)</span></div>
+              <div class="stat-row"><span class="stat-label">REACH</span><span class="stat-value">66 px (Medium)</span></div>
+              <div class="stat-row"><span class="stat-label">WINDUP</span><span class="stat-value">0.22s (Standard)</span></div>
+              <div class="stat-row"><span class="stat-label">KEY PERK</span><span class="stat-value highlight-cyan">Perfect Parry Punish</span></div>
+            </div>
+            <button class="hero-select-btn" data-hero="KAELEN">SELECTED</button>
+          </div>
+
+          <!-- Lyra: Bow -->
+          <div class="hero-card" data-hero="LYRA">
+            <div class="hero-header">
+              <div class="hero-avatar avatar-lyra">🏹</div>
+              <div class="hero-identity">
+                <h3 class="hero-name">LYRA</h3>
+                <span class="hero-title">The Ranger</span>
+              </div>
+              <span class="weapon-badge ranged-badge">BOW</span>
+            </div>
+            <p class="hero-summary">High-velocity projectile sniper. Punishes runners at range, but stationary on draw and weak point-blank.</p>
+            <div class="hero-stats">
+              <div class="stat-row"><span class="stat-label">STYLE</span><span class="stat-value">Projectile (Arrow)</span></div>
+              <div class="stat-row"><span class="stat-label">SPEED</span><span class="stat-value">640 px/s (Rapid)</span></div>
+              <div class="stat-row"><span class="stat-label">DRAW TIME</span><span class="stat-value">0.38s (Stationary)</span></div>
+              <div class="stat-row"><span class="stat-label">COUNTERPLAY</span><span class="stat-value highlight-green">Rush &lt;75px or Parry</span></div>
+            </div>
+            <button class="hero-select-btn" data-hero="LYRA">SELECT</button>
+          </div>
+
+          <!-- Torren: Shotgun -->
+          <div class="hero-card" data-hero="TORREN">
+            <div class="hero-header">
+              <div class="hero-avatar avatar-torren">💥</div>
+              <div class="hero-identity">
+                <h3 class="hero-name">TORREN</h3>
+                <span class="hero-title">The Breaker</span>
+              </div>
+              <span class="weapon-badge burst-badge">SHOTGUN</span>
+            </div>
+            <p class="hero-summary">Devastating close-range burst blast. Lightning-fast windup with punishing whiff recovery.</p>
+            <div class="hero-stats">
+              <div class="stat-row"><span class="stat-label">STYLE</span><span class="stat-value">Burst Melee (Cone)</span></div>
+              <div class="stat-row"><span class="stat-label">SPREAD</span><span class="stat-value">48 px Radius</span></div>
+              <div class="stat-row"><span class="stat-label">WINDUP</span><span class="stat-value">0.12s (Ultra Fast)</span></div>
+              <div class="stat-row"><span class="stat-label">RISK</span><span class="stat-value highlight-pink">0.42s Heavy Recovery</span></div>
+            </div>
+            <button class="hero-select-btn" data-hero="TORREN">SELECT</button>
+          </div>
+
+          <!-- Ignis: Bomb -->
+          <div class="hero-card" data-hero="IGNIS">
+            <div class="hero-header">
+              <div class="hero-avatar avatar-ignis">💣</div>
+              <div class="hero-identity">
+                <h3 class="hero-name">IGNIS</h3>
+                <span class="hero-title">The Pyrotech</span>
+              </div>
+              <span class="weapon-badge hazard-badge">BOMB</span>
+            </div>
+            <p class="hero-summary">Tactical area-denial hazard tosser. Unparryable detonation pierces shields; counter by dodging.</p>
+            <div class="hero-stats">
+              <div class="stat-row"><span class="stat-label">STYLE</span><span class="stat-value">Hazard AoE (Ground)</span></div>
+              <div class="stat-row"><span class="stat-label">RANGE</span><span class="stat-value">175 px Lob</span></div>
+              <div class="stat-row"><span class="stat-label">FUSE</span><span class="stat-value">0.75s Countdown</span></div>
+              <div class="stat-row"><span class="stat-label">KEY PERK</span><span class="stat-value highlight-orange">Unparryable Blast</span></div>
+            </div>
+            <button class="hero-select-btn" data-hero="IGNIS">SELECT</button>
+          </div>
+        </div>
+
+        <div class="hero-modal-footer">
+          <div class="current-selection-badge">
+            ACTIVE HERO: <span id="modalActiveHeroName" class="active-hero-text">KAELEN</span>
+          </div>
+          <span class="heroes-note">Archetypes active for Solo and Online PvP</span>
+        </div>
       </div>
     </div>
   </div>

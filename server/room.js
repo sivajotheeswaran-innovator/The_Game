@@ -55,7 +55,7 @@ class Room {
   /**
    * Adds a player to the room
    */
-  addPlayer(ws, req) {
+  addPlayer(ws, req, options) {
     if (this.players[1] && this.players[2]) {
       return { success: false, reason: 'Room is already full' };
     }
@@ -70,6 +70,19 @@ class Room {
       connected: true,
       ip: ip
     };
+
+    // Configure player hero and weapon archetype
+    if (options && options.weapon) {
+      const p = this.state.players[playerId - 1];
+      if (p) {
+        p.weapon = (options.weapon || 'SPEAR').toUpperCase();
+        p.characterId = (options.characterId || 'KAELEN').toUpperCase();
+        const char = ClashState.CONSTANTS.CHARACTERS[p.characterId];
+        if (char) {
+          p.color = playerId === 1 ? char.color : (char.altColor || char.color);
+        }
+      }
+    }
 
     // Both players now present -> start the match!
     if (this.players[1] && this.players[2]) {

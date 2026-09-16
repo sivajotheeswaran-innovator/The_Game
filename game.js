@@ -157,6 +157,69 @@
       osc.stop(t + 0.11);
     }
 
+    playBowShot() {
+      this._init();
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+
+      // Resonant string twang
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(680, t);
+      osc.frequency.exponentialRampToValueAtTime(180, t + 0.12);
+
+      gain.gain.setValueAtTime(0.25, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.14);
+    }
+
+    playExplosion() {
+      this._init();
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+
+      // Deep sub-bass boom
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(110, t);
+      osc.frequency.exponentialRampToValueAtTime(25, t + 0.35);
+
+      gain.gain.setValueAtTime(0.45, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.38);
+    }
+
+    playGlance() {
+      this._init();
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+
+      // High-pitched metallic ping
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1850, t);
+      osc.frequency.exponentialRampToValueAtTime(920, t + 0.09);
+
+      gain.gain.setValueAtTime(0.20, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.10);
+    }
+
     playVictory() {
       this._init();
       if (!this.ctx) return;
@@ -187,6 +250,9 @@
         else if (ev.type === 'PARRY_SUCCESS') this.playParry();
         else if (ev.type === 'PARRY_WHIFF') this.playWhiff();
         else if (ev.type === 'DASH') this.playDash();
+        else if (ev.type === 'PROJECTILE_FIRED') this.playBowShot();
+        else if (ev.type === 'HAZARD_EXPLODED') this.playExplosion();
+        else if (ev.type === 'PROJECTILE_GLANCE') this.playGlance();
         else if (ev.type === 'ATTACK_ACTIVE') this.playSwing();
         else if (ev.type === 'ROUND_OVER' && ev.isMatchOver) this.playVictory();
       }
@@ -225,10 +291,21 @@
       this.networkToastTimer = null;
       this.onlineMatchStats = { totalSamples: 0, poorSamples: 0 };
 
+      // Selected Hero & Weapon Archetype (Part 2 & Part 5)
+      try {
+        this.selectedHero = localStorage.getItem('clash_arena_hero') || 'KAELEN';
+      } catch (e) {
+        this.selectedHero = 'KAELEN';
+      }
+      this.selectedWeapon = (ClashState.CONSTANTS.CHARACTERS[this.selectedHero] || ClashState.CONSTANTS.CHARACTERS.KAELEN).weapon;
+
+      this.applySelectedHero();
       this._setupUI();
       this._setupOnlineNetworking();
       this._setupTouch();
       this._setupVisibility();
+      this._setupGraphicsModal();
+      this._setupCharacterSelectModal();
     }
 
     _setupUI() {
@@ -275,6 +352,7 @@
       const doReset = () => {
         if (this.opponentMode === 'ONLINE') return;
         this.state = ClashState.createInitialState();
+        this.applySelectedHero();
         this.ai.resetRound();
         if (overlayEl) overlayEl.classList.remove('visible');
         const overlayNetNote = document.getElementById('overlayNetworkNote');
@@ -415,7 +493,10 @@
           const targetUrl = getTargetServerUrl();
           this.network.connect(targetUrl).then(() => {
             if (statusMsg) statusMsg.textContent = '';
-            this.network.createRoom();
+            this.network.createRoom({
+              weapon: this.selectedWeapon,
+              characterId: this.selectedHero,
+            });
           }).catch(err => {
             if (statusMsg) statusMsg.textContent = 'Could not connect to game server. Is it running?';
           });
@@ -435,7 +516,10 @@
           const targetUrl = getTargetServerUrl();
           this.network.connect(targetUrl).then(() => {
             if (statusMsg) statusMsg.textContent = 'Joining room ' + code + '...';
-            this.network.joinRoom(code);
+            this.network.joinRoom(code, {
+              weapon: this.selectedWeapon,
+              characterId: this.selectedHero,
+            });
           }).catch(err => {
             if (statusMsg) statusMsg.textContent = 'Could not connect to game server.';
           });
@@ -746,6 +830,146 @@
       const cx = Math.cos(angle) * clampedDist;
       const cy = Math.sin(angle) * clampedDist;
       thumb.style.transform = `translate(calc(-50% + ${cx}px), calc(-50% + ${cy}px))`;
+    }
+
+    _setupGraphicsModal() {
+      const openBtn = document.getElementById('openGraphicsModalBtn');
+      const closeBtn = document.getElementById('closeGraphicsModalBtn');
+      const modal = document.getElementById('graphicsModal');
+      const presetBtns = document.querySelectorAll('.preset-btn');
+      const hudPreset = document.getElementById('hudGraphicsPreset');
+
+      const updateActiveButtons = () => {
+        const currentKey = this.renderer.preset.key;
+        presetBtns.forEach(btn => {
+          const key = btn.getAttribute('data-preset');
+          btn.classList.toggle('active', key === currentKey);
+        });
+        if (hudPreset) {
+          hudPreset.textContent = this.renderer.preset.label.toUpperCase();
+        }
+      };
+
+      if (openBtn && modal) {
+        openBtn.addEventListener('click', () => {
+          updateActiveButtons();
+          modal.classList.add('visible');
+        });
+      }
+
+      if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => {
+          modal.classList.remove('visible');
+        });
+      }
+
+      if (modal) {
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.classList.remove('visible');
+          }
+        });
+      }
+
+      presetBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const key = btn.getAttribute('data-preset');
+          if (key) {
+            this.renderer.setPreset(key);
+            updateActiveButtons();
+          }
+        });
+      });
+
+      // Initial update
+      updateActiveButtons();
+    }
+
+    applySelectedHero() {
+      const char = (ClashState.CONSTANTS.CHARACTERS && ClashState.CONSTANTS.CHARACTERS[this.selectedHero])
+        || ClashState.CONSTANTS.CHARACTERS.KAELEN;
+      this.selectedWeapon = char.weapon;
+
+      if (this.state && this.state.players && this.state.players[0]) {
+        this.state.players[0].characterId = char.id;
+        this.state.players[0].weapon = char.weapon;
+        this.state.players[0].color = char.color;
+      }
+
+      const hudHero = document.getElementById('hudCurrentHero');
+      if (hudHero) hudHero.textContent = char.name.toUpperCase();
+
+      const modalHeroText = document.getElementById('modalActiveHeroName');
+      if (modalHeroText) modalHeroText.textContent = `${char.name.toUpperCase()} (${char.weapon})`;
+    }
+
+    _setupCharacterSelectModal() {
+      const openBtn = document.getElementById('openCharSelectBtn');
+      const closeBtn = document.getElementById('closeCharSelectModalBtn');
+      const modal = document.getElementById('characterSelectModal');
+      const heroCards = document.querySelectorAll('.hero-card');
+      const heroSelectBtns = document.querySelectorAll('.hero-select-btn');
+
+      const updateActiveHeroUI = () => {
+        heroCards.forEach(card => {
+          const heroId = card.getAttribute('data-hero');
+          const isSelected = (heroId === this.selectedHero);
+          card.classList.toggle('active', isSelected);
+          const btn = card.querySelector('.hero-select-btn');
+          if (btn) {
+            btn.textContent = isSelected ? 'SELECTED' : 'SELECT';
+          }
+        });
+        this.applySelectedHero();
+      };
+
+      const selectHero = (heroId) => {
+        if (!heroId || !ClashState.CONSTANTS.CHARACTERS[heroId]) return;
+        this.selectedHero = heroId;
+        try {
+          localStorage.setItem('clash_arena_hero', heroId);
+        } catch (e) {}
+        updateActiveHeroUI();
+      };
+
+      if (openBtn && modal) {
+        openBtn.addEventListener('click', () => {
+          updateActiveHeroUI();
+          modal.classList.add('visible');
+        });
+      }
+
+      if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => {
+          modal.classList.remove('visible');
+        });
+      }
+
+      if (modal) {
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.classList.remove('visible');
+          }
+        });
+      }
+
+      heroCards.forEach(card => {
+        card.addEventListener('click', () => {
+          const heroId = card.getAttribute('data-hero');
+          selectHero(heroId);
+        });
+      });
+
+      heroSelectBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const heroId = btn.getAttribute('data-hero');
+          selectHero(heroId);
+          if (modal) modal.classList.remove('visible');
+        });
+      });
+
+      updateActiveHeroUI();
     }
 
     _setupVisibility() {

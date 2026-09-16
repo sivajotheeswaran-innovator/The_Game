@@ -168,12 +168,21 @@
       }
     }
 
-    createRoom() {
-      this.send({ type: MSG.CREATE_ROOM });
+    createRoom(opts = {}) {
+      this.send({
+        type: MSG.CREATE_ROOM,
+        weapon: opts.weapon || 'SPEAR',
+        characterId: opts.characterId || 'KAELEN',
+      });
     }
 
-    joinRoom(roomCode) {
-      this.send({ type: MSG.JOIN_ROOM, roomCode: roomCode });
+    joinRoom(roomCode, opts = {}) {
+      this.send({
+        type: MSG.JOIN_ROOM,
+        roomCode: roomCode,
+        weapon: opts.weapon || 'SPEAR',
+        characterId: opts.characterId || 'KAELEN',
+      });
     }
 
     send(data) {

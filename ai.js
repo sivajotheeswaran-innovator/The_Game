@@ -210,12 +210,59 @@
         }
       }
 
+      // 2.5 PROJECTILE EVASION / PARRY
+      if (state.projectiles && state.projectiles.length > 0 && p2.actionState === 'IDLE') {
+        for (let i = 0; i < state.projectiles.length; i++) {
+          const proj = state.projectiles[i];
+          if (!proj.active || proj.ownerId === p2.id) continue;
+
+          const projDist = Math.hypot(p2.pos.x - proj.x, p2.pos.y - proj.y);
+          if (projDist < 130) {
+            const roll = Math.random();
+            if (roll < parrySkill) {
+              return { moveX: 0, moveY: 0, attack: false, dodge: false, parry: true };
+            } else if (p2.dashCooldown <= 0 && roll < parrySkill + dodgeSkill) {
+              return { moveX: perp.x, moveY: perp.y, attack: false, dodge: true, parry: false };
+            }
+          }
+        }
+      }
+
+      // 2.6 BOMB HAZARD EVASION (Unparryable -> must dodge or flee!)
+      if (state.hazards && state.hazards.length > 0 && p2.actionState === 'IDLE') {
+        for (let i = 0; i < state.hazards.length; i++) {
+          const haz = state.hazards[i];
+          if (!haz.active) continue;
+          const hazDist = Math.hypot(p2.pos.x - haz.x, p2.pos.y - haz.y);
+          if (hazDist < haz.radius + 20 && haz.fuseTimer < 0.4) {
+            const awayX = p2.pos.x - haz.x;
+            const awayY = p2.pos.y - haz.y;
+            const awayLen = Math.hypot(awayX, awayY) || 1;
+            return {
+              moveX: awayX / awayLen,
+              moveY: awayY / awayLen,
+              attack: false,
+              dodge: p2.dashCooldown <= 0,
+              parry: false,
+            };
+          }
+        }
+      }
+
       // 3. NEUTRAL GAME & SPACING
       if (p2.actionState === 'IDLE') {
         this.decisionTimer -= dt;
 
-        // Maintain sweet spot spacing (~90 to 130px)
-        const targetSpacing = this.idealSpacing;
+        // Maintain sweet spot spacing adapted to opponent weapon
+        let targetSpacing = this.idealSpacing;
+        if (p1.weapon === 'BOW') {
+          // Rush archer to trigger point-blank glance weakness (< 75px)
+          targetSpacing = 55;
+        } else if (p1.weapon === 'SHOTGUN') {
+          // Keep spacing slightly outside shotgun burst cone
+          targetSpacing = 135;
+        }
+
         if (dist > targetSpacing + 25) {
           // Move toward player with strafe blending
           moveX = toP1.x * 0.75 + perp.x * 0.25;
